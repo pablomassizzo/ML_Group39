@@ -1,0 +1,158 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import json
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+
+with open("data.json", "r") as file:
+    data = json.load(file)
+
+df = pd.DataFrame(data)
+df = df.dropna()
+
+categorical_cols = ['sex', 'smoker', 'nic_other', 'opioids', 'asthma', 'diabetes', 
+                    'immune_defic', 'addiction', 'hds', 'family_cancer', 
+                    'family_heart_disease', 'family_cholesterol']
+
+df = pd.get_dummies(df, columns=categorical_cols, drop_first=True)
+df.rename(columns={'sex_m': 'sex_male'}, inplace=True)
+
+sns.set_style("whitegrid")
+
+plt.figure(figsize=(8, 5))
+sns.histplot(df['age'], bins=30, kde=True)
+plt.title("Distribution of Age at Death")
+plt.xlabel("Age")
+plt.ylabel("Count")
+plt.show()
+
+plt.figure(figsize=(5, 5))
+sns.boxplot(y=df['age'])
+plt.title("Boxplot of Age at Death")
+plt.ylabel("Age")
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.boxplot(x=df["sex_male"], y=df["age"])
+plt.xticks([0, 1], ["Female", "Male"])
+plt.title("Age at Death by Sex")
+plt.show()
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(df.corr(), annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
+plt.title("Feature Correlation Heatmap")
+plt.show()
+
+# Linear Regression
+X = df.drop(columns=['age'])
+y = df['age']
+
+numeric_cols = X.select_dtypes(include=[np.number]).columns
+X_numeric = X[numeric_cols]
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_numeric)
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+mae = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_test, y_pred)
+
+print(f"Mean Absolute Error (MAE): {mae:.2f}")
+print(f"Mean Squared Error (MSE): {mse:.2f}")
+print(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
+print(f"R-squared (R²): {r2:.2f}")
+
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x=y_test, y=y_pred)
+plt.xlabel("Actual Age at Death")
+plt.ylabel("Predicted Age at Death")
+plt.title("Actual vs. Predicted Age of Death (Linear Regression)")
+plt.axline((0, 0), slope=1, color="red", linestyle="--") 
+plt.show()
+
+# Logistic Regression
+bins = [0, 50, 70, np.inf]
+labels = ['Young', 'Middle-aged', 'Old']
+df['age_category'] = pd.cut(df['age'], bins=bins, labels=labels, right=False)
+
+X = df.drop(columns=['age', 'age_category'])
+y = df['age_category']
+
+X = pd.get_dummies(X, drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+class_report = classification_report(y_test, y_pred)
+
+print(f"Accuracy: {accuracy:.2f}")
+print(f"Confusion Matrix:\n{conf_matrix}")
+print(f"Classification Report:\n{class_report}")
+
+# Random Forest
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+
+y_pred = rf_model.predict(X_test)
+
+accuracy_rf = accuracy_score(y_test, y_pred)
+conf_matrix_rf = confusion_matrix(y_test, y_pred)
+class_report_rf = classification_report(y_test, y_pred)
+
+print(f"Random Forest Accuracy: {accuracy_rf:.2f}")
+print(f"Random Forest Confusion Matrix:\n{conf_matrix_rf}")
+print(f"Random Forest Classification Report:\n{class_report_rf}")
+
+# Gradient Boosting Regressor
+gb_regressor = GradientBoostingRegressor(n_estimators=100, random_state=42)
+gb_regressor.fit(X_train, y_train.cat.codes)
+
+y_pred_gb = gb_regressor.predict(X_test)
+
+mae_gb = mean_absolute_error(y_test.cat.codes, y_pred_gb)
+mse_gb = mean_squared_error(y_test.cat.codes, y_pred_gb)
+rmse_gb = np.sqrt(mse_gb)
+r2_gb = r2_score(y_test.cat.codes, y_pred_gb)
+
+print(f"Gradient Boosting MAE: {mae_gb:.2f}")
+print(f"Gradient Boosting MSE: {mse_gb:.2f}")
+print(f"Gradient Boosting RMSE: {rmse_gb:.2f}")
+print(f"Gradient Boosting R-squared: {r2_gb:.2f}")
+
+# Model Comparison
+comparison_df = pd.DataFrame({
+    "Model": ["Linear Regression", "Logistic Regression", "Random Forest", "Gradient Boosting"],
+    "MAE": [11.32, None, None, mae_gb],
+    "MSE": [196.28, None, None, mse_gb],
+    "RMSE": [14.01, None, None, rmse_gb],
+    "R²": [0.64, None, None, r2_gb],
+    "Accuracy": [None, 0.67, accuracy_rf, None],
+    "Precision (Macro Avg)": [None, 0.63, 0.61, None],  
+    "Recall (Macro Avg)": [None, 0.64, 0.61, None],
+    "F1-score (Macro Avg)": [None, 0.63, 0.61, None]
+})
+
+print(comparison_df)
+
+
